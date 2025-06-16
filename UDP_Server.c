@@ -29,7 +29,7 @@ int main() {
     bzero(buffer, 0);
 
     printf("Enter your message: ");
-    fgets(buffer, 100, stdin);z
+    fgets(buffer, 100, stdin);
     sendto(sock_fd, buffer, 100, 0, (struct sockaddr *)&client_Addr, addrlen);
   }
 
