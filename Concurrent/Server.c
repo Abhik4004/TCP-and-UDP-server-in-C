@@ -5,63 +5,55 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <fcntl.h>
-
-int gcd(int a, int b) {
-  if(a == 0 || b == 0) return 0;
-  int min = (a < b) ? a : b;
-
-  while(1) {
-    if(a % min == 0 && b % min == 0) break;
-    min--;
-  }
-  return min;
-}
 
 int main() {
-  int socket_fd, client_fd;
-  struct sockaddr_in serveraddr;
-  socklen_t addrlen = sizeof(serveraddr);
-  int buffer[2];
-  pid_t child_p;
+    int server_fd, client_fd;
+    struct sockaddr_in serveraddr, clientaddr;
+    socklen_t addrlen = sizeof(clientaddr);
+    char buffer[1024];
 
-  socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-  printf("[+] Socket_Bind Sucessfull.....\n");
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
-  serveraddr.sin_family = AF_INET;
-  serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  serveraddr.sin_port = htons(2100);
+    serveraddr.sin_family = AF_INET;
+    serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serveraddr.sin_port = htons(2100);
 
-  bind(socket_fd, (struct sockaddr *)&serveraddr, addrlen);
-  printf("[+] Bind successfull...\n");
-  
-  listen(socket_fd, 5);
-  printf("[+] Server is listening on port 2100.....\n");
+    bind(server_fd, (struct sockaddr *)&serveraddr, sizeof(serveraddr));
+    listen(server_fd, 5);
 
-  client_fd = accept(socket_fd, (struct sockaddr *)NULL, NULL);
+    printf("[+] Server listening on port 2100...\n");
 
-  while(1) {
-    recv(client_fd, buffer, 100, 0);  
-    int num1 = ntohl(buffer[0]);
-    int num2 = ntohl(buffer[1]);
-    printf("Num 1 -> %d and Num 2 -> %d\n", num1, num2);
+    while (1) {
+        client_fd = accept(server_fd, (struct sockaddr *)&clientaddr, &addrlen);
 
-    int num3 = gcd(num1, num2);
-    printf("LCM is %d\n", num3);
-    num3 = htonl(num3);
+        // Print connected client info
+        char clientIP[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &(clientaddr.sin_addr), clientIP, INET_ADDRSTRLEN);
+        int clientPort = ntohs(clientaddr.sin_port);
+        printf("[+] Client connected: IP %s, Port %d\n", clientIP, clientPort);
 
-    child_p = fork();
+        if (fork() == 0) {  // Child process
+            close(server_fd);  // Child closes listening socket
 
-    if(child_p == 0) {
-      close(socket_fd);
-      send(client_fd, &num3, sizeof(num3), 0);
-    } else {
-      break;
+            while (1) {
+                int n = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+                if (n <= 0) break;  // Client disconnected or error
+
+                buffer[n] = '\0';  // Null-terminate received string
+                printf("Client (%s:%d) says: %s", clientIP, clientPort, buffer);
+
+                // Echo message back to client
+                send(client_fd, buffer, n, 0);
+            }
+
+            close(client_fd);
+            printf("[+] Client disconnected: IP %s, Port %d\n", clientIP, clientPort);
+            exit(0);  // Terminate child process
+        }
+
+        close(client_fd);  // Parent closes client socket
     }
 
-    if(num1 == 0 && num2 == 0) break;
-  } 
-  close(socket_fd);
-  close(client_fd);
-  return 0;
+    close(server_fd);
+    return 0;
 }
